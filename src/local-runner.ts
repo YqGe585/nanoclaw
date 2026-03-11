@@ -48,7 +48,12 @@ function prepareLocalDirs(group: RegisteredGroup, isMain: boolean) {
   fs.mkdirSync(groupDir, { recursive: true });
 
   // Per-group Claude sessions directory
-  const groupSessionsDir = path.join(DATA_DIR, 'sessions', group.folder, '.claude');
+  const groupSessionsDir = path.join(
+    DATA_DIR,
+    'sessions',
+    group.folder,
+    '.claude',
+  );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
@@ -138,7 +143,7 @@ export async function runLocalAgent(
 
   // Build environment for the child process
   const childEnv: Record<string, string> = {
-    ...process.env as Record<string, string>,
+    ...(process.env as Record<string, string>),
     // Workspace path overrides for agent-runner
     NANOCLAW_WORKSPACE_GROUP: groupDir,
     NANOCLAW_WORKSPACE_IPC: groupIpcDir,
@@ -159,10 +164,7 @@ export async function runLocalAgent(
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
-      [
-        '--import', 'tsx',
-        path.join(agentRunnerDir, 'src', 'index.ts'),
-      ],
+      ['--import', 'tsx', path.join(agentRunnerDir, 'src', 'index.ts')],
       {
         cwd: agentRunnerDir,
         stdio: ['pipe', 'pipe', 'pipe'],

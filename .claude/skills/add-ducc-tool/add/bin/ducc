@@ -1,0 +1,6 @@
+#!/bin/bash
+# Ducc wrapper for NanoClaw environment
+# Handles HOME directory issue to find login credentials
+
+unset CLAUDECODE
+HOME=/root /root/.comate/baidu-cc/bin/ducc "$@"

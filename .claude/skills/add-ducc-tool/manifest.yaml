@@ -1,0 +1,11 @@
+skill: ducc-tool
+version: 1.0.0
+description: "Add ducc (百度 Claude Code CLI) support with HOME directory handling for container environments"
+core_version: 0.1.0
+adds:
+  - bin/ducc
+modifies: []
+structured: {}
+conflicts: []
+depends: []
+test: "test -f bin/ducc && bin/ducc --help 2>&1 | grep -q 'Usage:'"
