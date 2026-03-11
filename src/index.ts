@@ -62,6 +62,16 @@ let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
+// Wake-up mechanism: allows channels to wake the message loop immediately
+// instead of waiting for the next POLL_INTERVAL tick.
+let messageWakeup: (() => void) | null = null;
+function notifyNewMessage(): void {
+  if (messageWakeup) {
+    messageWakeup();
+    messageWakeup = null;
+  }
+}
+
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 
@@ -436,7 +446,10 @@ async function startMessageLoop(): Promise<void> {
     } catch (err) {
       logger.error({ err }, 'Error in message loop');
     }
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+    await new Promise<void>((resolve) => {
+      messageWakeup = resolve;
+      setTimeout(resolve, POLL_INTERVAL);
+    });
   }
 }
 
@@ -512,6 +525,9 @@ async function main(): Promise<void> {
       isGroup?: boolean,
     ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => registeredGroups,
+    notifyNewMessage,
+    registerGroup: (jid: string, group: RegisteredGroup) =>
+      registerGroup(jid, group),
   };
 
   // Create and connect all registered channels.

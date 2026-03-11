@@ -17,7 +17,8 @@
     "auth": "tsx src/whatsapp-auth.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "chat": "AGENT_RUNTIME=local tsx scripts/local-chat.ts"
+    "chat": "AGENT_RUNTIME=local tsx scripts/local-chat.ts",
+    "cli": "tsx scripts/cli-client.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

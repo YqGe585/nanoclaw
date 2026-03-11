@@ -91,6 +91,13 @@ function prepareLocalDirs(group: RegisteredGroup, isMain: boolean) {
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
 
+  // Clean stale _close sentinel from previous runs
+  try {
+    fs.unlinkSync(path.join(groupIpcDir, 'input', '_close'));
+  } catch {
+    /* ignore */
+  }
+
   // Global memory directory
   const globalDir = path.join(GROUPS_DIR, 'global');
   const globalPath = fs.existsSync(globalDir) ? globalDir : undefined;
