@@ -58,6 +58,9 @@ Skills to add or switch to different messaging platforms:
 The project uses Docker by default (cross-platform). For macOS users who prefer Apple Container:
 - `/convert-to-apple-container` - Switch from Docker to Apple Container (macOS-only)
 
+For environments without Docker:
+- Set `AGENT_RUNTIME=local` to run agents as local child processes (no container runtime required)
+
 ### Platform Support
 - `/setup-linux` - Make the full setup work on Linux (depends on Docker conversion)
 - `/setup-windows` - Windows support via WSL2 + Docker
@@ -103,11 +106,18 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Sessions auto-compact when context gets too long, preserving critical information
 
 ### Container Isolation
-- All agents run inside containers (lightweight Linux VMs)
+- All agents run inside containers (lightweight Linux VMs) by default
 - Each agent invocation spawns a container with mounted directories
 - Containers provide filesystem isolation - agents can only see mounted paths
 - Bash access is safe because commands run inside the container, not on the host
 - Browser automation via agent-browser with Chromium in the container
+
+### Local Runtime Mode
+- Set `AGENT_RUNTIME=local` to run agents as local child processes instead of Docker containers
+- Same agent-runner code is used; workspace paths are overridden via environment variables (`NANOCLAW_WORKSPACE_*`)
+- Communication protocol (stdin/stdout sentinel markers, IPC files) is identical
+- Trades container isolation for zero Docker dependency — useful for development, testing, or environments without Docker
+- `scripts/local-chat.ts` provides a standalone interactive CLI chat that requires only API credentials (no database, no channels, no Docker)
 
 ### Scheduled Tasks
 - Users can ask Claude to schedule recurring or one-time tasks from any group

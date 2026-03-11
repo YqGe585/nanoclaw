@@ -55,7 +55,13 @@ interface SDKUserMessage {
   session_id: string;
 }
 
-const IPC_INPUT_DIR = '/workspace/ipc/input';
+// Workspace paths — overridable via env for local (non-Docker) execution
+const WORKSPACE_GROUP = process.env.NANOCLAW_WORKSPACE_GROUP || '/workspace/group';
+const WORKSPACE_IPC = process.env.NANOCLAW_WORKSPACE_IPC || '/workspace/ipc';
+const WORKSPACE_GLOBAL = process.env.NANOCLAW_WORKSPACE_GLOBAL || '/workspace/global';
+const WORKSPACE_EXTRA = process.env.NANOCLAW_WORKSPACE_EXTRA || '/workspace/extra';
+
+const IPC_INPUT_DIR = path.join(WORKSPACE_IPC, 'input');
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_POLL_MS = 500;
 
@@ -166,7 +172,7 @@ function createPreCompactHook(assistantName?: string): HookCallback {
       const summary = getSessionSummary(sessionId, transcriptPath);
       const name = summary ? sanitizeFilename(summary) : generateFallbackName();
 
-      const conversationsDir = '/workspace/group/conversations';
+      const conversationsDir = path.join(WORKSPACE_GROUP, 'conversations');
       fs.mkdirSync(conversationsDir, { recursive: true });
 
       const date = new Date().toISOString().split('T')[0];
@@ -357,7 +363,7 @@ function waitForIpcMessage(): Promise<string | null> {
 async function runQuery(
   prompt: string,
   sessionId: string | undefined,
-  mcpServerPath: string,
+  mcpConfig: { command: string; args: string[] },
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
@@ -392,7 +398,7 @@ async function runQuery(
   let resultCount = 0;
 
   // Load global CLAUDE.md as additional system context (shared across all groups)
-  const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
+  const globalClaudeMdPath = path.join(WORKSPACE_GLOBAL, 'CLAUDE.md');
   let globalClaudeMd: string | undefined;
   if (!containerInput.isMain && fs.existsSync(globalClaudeMdPath)) {
     globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
@@ -401,7 +407,7 @@ async function runQuery(
   // Discover additional directories mounted at /workspace/extra/*
   // These are passed to the SDK so their CLAUDE.md files are loaded automatically
   const extraDirs: string[] = [];
-  const extraBase = '/workspace/extra';
+  const extraBase = WORKSPACE_EXTRA;
   if (fs.existsSync(extraBase)) {
     for (const entry of fs.readdirSync(extraBase)) {
       const fullPath = path.join(extraBase, entry);
@@ -417,7 +423,7 @@ async function runQuery(
   for await (const message of query({
     prompt: stream,
     options: {
-      cwd: '/workspace/group',
+      cwd: WORKSPACE_GROUP,
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
       resumeSessionAt: resumeAt,
@@ -440,12 +446,13 @@ async function runQuery(
       settingSources: ['project', 'user'],
       mcpServers: {
         nanoclaw: {
-          command: 'node',
-          args: [mcpServerPath],
+          command: mcpConfig.command,
+          args: mcpConfig.args,
           env: {
             NANOCLAW_CHAT_JID: containerInput.chatJid,
             NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+            NANOCLAW_WORKSPACE_IPC: WORKSPACE_IPC,
           },
         },
       },
@@ -516,7 +523,14 @@ async function main(): Promise<void> {
   }
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
+  // In Docker the .ts files are compiled to .js; locally via tsx only .ts exists.
+  // Detect which file is available and adjust the MCP command accordingly.
+  const mcpServerJs = path.join(__dirname, 'ipc-mcp-stdio.js');
+  const mcpServerTs = path.join(__dirname, 'ipc-mcp-stdio.ts');
+  const useTsx = !fs.existsSync(mcpServerJs) && fs.existsSync(mcpServerTs);
+  const mcpServerPath = useTsx ? mcpServerTs : mcpServerJs;
+  const mcpCommand = useTsx ? process.execPath : 'node';
+  const mcpArgs = useTsx ? ['--import', 'tsx', mcpServerPath] : [mcpServerPath];
 
   let sessionId = containerInput.sessionId;
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
@@ -541,7 +555,7 @@ async function main(): Promise<void> {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
+      const queryResult = await runQuery(prompt, sessionId, { command: mcpCommand, args: mcpArgs }, containerInput, sdkEnv, resumeAt);
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
       }

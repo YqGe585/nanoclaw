@@ -34,6 +34,17 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 
 > **Note:** Commands prefixed with `/` (like `/setup`, `/add-whatsapp`) are [Claude Code skills](https://code.claude.com/docs/en/skills). Type them inside the `claude` CLI prompt, not in your regular terminal.
 
+### Local CLI Chat (No Docker, No Channels)
+
+Want to talk to the agent directly in your terminal without Docker or any messaging channel?
+
+```bash
+npm run chat                          # Interactive multi-turn mode
+npm run chat -- "Your message here"   # Single-shot mode
+```
+
+This spawns the agent-runner as a local child process. No container runtime or channel configuration required — just API credentials in `.env`.
+
 ## Philosophy
 
 **Small enough to understand.** One process, a few source files and no microservices. If you want to understand the full NanoClaw codebase, just ask Claude Code to walk you through it.
@@ -61,6 +72,7 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 - **Scheduled tasks** - Recurring jobs that run Claude and can message you back
 - **Web access** - Search and fetch content from the Web
 - **Container isolation** - Agents are sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
+- **Local runtime mode** - Run agents as local child processes without Docker, with a CLI chat for direct terminal interaction
 - **Agent Swarms** - Spin up teams of specialized agents that collaborate on complex tasks. NanoClaw is the first personal AI assistant to support agent swarms.
 - **Optional integrations** - Add Gmail (`/add-gmail`) and more via skills
 
@@ -117,15 +129,15 @@ Skills we'd like to see:
 - macOS or Linux
 - Node.js 20+
 - [Claude Code](https://claude.ai/download)
-- [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
+- [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux) — not required if using `AGENT_RUNTIME=local`
 
 ## Architecture
 
 ```
-Channels --> SQLite --> Polling loop --> Container (Claude Agent SDK) --> Response
+Channels --> SQLite --> Polling loop --> Container/Local (Claude Agent SDK) --> Response
 ```
 
-Single Node.js process. Channels are added via skills and self-register at startup — the orchestrator connects whichever ones have credentials present. Agents execute in isolated Linux containers with filesystem isolation. Only mounted directories are accessible. Per-group message queue with concurrency control. IPC via filesystem.
+Single Node.js process. Channels are added via skills and self-register at startup — the orchestrator connects whichever ones have credentials present. Agents execute in isolated Linux containers or as local child processes (controlled by `AGENT_RUNTIME`). Only mounted directories are accessible in container mode. Per-group message queue with concurrency control. IPC via filesystem.
 
 For the full architecture details, see [docs/SPEC.md](docs/SPEC.md).
 
@@ -136,7 +148,9 @@ Key files:
 - `src/router.ts` - Message formatting and outbound routing
 - `src/group-queue.ts` - Per-group queue with global concurrency limit
 - `src/container-runner.ts` - Spawns streaming agent containers
+- `src/local-runner.ts` - Spawns agents as local child processes (no Docker)
 - `src/task-scheduler.ts` - Runs scheduled tasks
+- `scripts/local-chat.ts` - Interactive CLI chat (no channels needed)
 - `src/db.ts` - SQLite operations (messages, groups, sessions, state)
 - `groups/*/CLAUDE.md` - Per-group memory
 
@@ -146,9 +160,13 @@ Key files:
 
 Docker provides cross-platform support (macOS, Linux and even Windows via WSL2) and a mature ecosystem. On macOS, you can optionally switch to Apple Container via `/convert-to-apple-container` for a lighter-weight native runtime.
 
+**Can I run without Docker?**
+
+Yes. Set `AGENT_RUNTIME=local` to run agents as local child processes instead of Docker containers. This trades container isolation for zero Docker dependency. You can also use `npm run chat` for a standalone CLI chat that requires no Docker, no channels, and no database — just API credentials.
+
 **Can I run this on Linux?**
 
-Yes. Docker is the default runtime and works on both macOS and Linux. Just run `/setup`.
+Yes. Docker is the default runtime and works on both macOS and Linux. Just run `/setup`. Alternatively, use `AGENT_RUNTIME=local` to skip Docker entirely.
 
 **Is this secure?**
 
@@ -163,8 +181,16 @@ We don't want configuration sprawl. Every user should customize NanoClaw so that
 Yes. NanoClaw supports any Claude API-compatible model endpoint. Set these environment variables in your `.env` file:
 
 ```bash
+# Required
 ANTHROPIC_BASE_URL=https://your-api-endpoint.com
 ANTHROPIC_AUTH_TOKEN=your-token-here
+
+# Optional — override model selection
+ANTHROPIC_MODEL=your-model-name                    # Default model for all requests
+ANTHROPIC_DEFAULT_SONNET_MODEL=your-sonnet-model   # Model used for Sonnet-tier requests
+ANTHROPIC_DEFAULT_OPUS_MODEL=your-opus-model       # Model used for Opus-tier requests
+ANTHROPIC_DEFAULT_HAIKU_MODEL=your-haiku-model     # Model used for Haiku-tier requests
+ANTHROPIC_CUSTOM_HEADERS='{"key":"value"}'          # Extra headers sent with API requests
 ```
 
 This allows you to use:

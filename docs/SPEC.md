@@ -44,10 +44,10 @@ A personal Claude assistant with multi-channel support, persistent memory per co
 │  └────────┬─────────┘    └────────┬─────────┘    └───────────────┘   │
 │           │                       │                                   │
 │           └───────────┬───────────┘                                   │
-│                       │ spawns container                              │
+│                       │ spawns container or local process              │
 │                       ▼                                               │
 ├──────────────────────────────────────────────────────────────────────┤
-│                     CONTAINER (Linux VM)                               │
+│               CONTAINER (Linux VM) or LOCAL PROCESS                    │
 ├──────────────────────────────────────────────────────────────────────┤
 │  ┌──────────────────────────────────────────────────────────────┐    │
 │  │                    AGENT RUNNER                               │    │
@@ -77,7 +77,7 @@ A personal Claude assistant with multi-channel support, persistent memory per co
 |-----------|------------|---------|
 | Channel System | Channel registry (`src/channels/registry.ts`) | Channels self-register at startup |
 | Message Storage | SQLite (better-sqlite3) | Store messages for polling |
-| Container Runtime | Containers (Linux VMs) | Isolated environments for agent execution |
+| Container Runtime | Containers (Linux VMs) or local processes | Isolated (or local) environments for agent execution |
 | Agent | @anthropic-ai/claude-agent-sdk (0.2.29) | Run Claude with tools and MCP servers |
 | Browser Automation | agent-browser + Chromium | Web interaction and screenshots |
 | Runtime | Node.js 20+ | Host process for routing and scheduling |
@@ -266,7 +266,8 @@ nanoclaw/
 │   ├── mount-security.ts          # Mount allowlist validation for containers
 │   ├── whatsapp-auth.ts           # Standalone WhatsApp authentication
 │   ├── task-scheduler.ts          # Runs scheduled tasks when due
-│   └── container-runner.ts        # Spawns agents in containers
+│   ├── container-runner.ts        # Spawns agents in containers
+│   └── local-runner.ts            # Spawns agents as local child processes (no Docker)
 │
 ├── container/
 │   ├── Dockerfile                 # Container image (runs as 'node' user, includes Claude Code CLI)
@@ -279,6 +280,9 @@ nanoclaw/
 │   │       └── ipc-mcp-stdio.ts   # Stdio-based MCP server for host communication
 │   └── skills/
 │       └── agent-browser.md       # Browser automation skill
+│
+├── scripts/
+│   └── local-chat.ts              # Interactive CLI chat (no channels/Docker needed)
 │
 ├── dist/                          # Compiled JavaScript (gitignored)
 │
@@ -350,6 +354,46 @@ export const MAX_CONCURRENT_CONTAINERS = Math.max(1, parseInt(process.env.MAX_CO
 
 export const TRIGGER_PATTERN = new RegExp(`^@${ASSISTANT_NAME}\\b`, 'i');
 ```
+
+### Agent Runtime
+
+The `AGENT_RUNTIME` environment variable controls how agents execute:
+
+| Value | Description |
+|-------|-------------|
+| `docker` (default) | Agents run in Docker/Apple Container with filesystem isolation |
+| `local` | Agents run as local child processes (no Docker required) |
+
+```typescript
+export type AgentRuntime = 'docker' | 'local';
+export const AGENT_RUNTIME: AgentRuntime =
+  (process.env.AGENT_RUNTIME as AgentRuntime) || 'docker';
+```
+
+When `AGENT_RUNTIME=local`:
+- `src/local-runner.ts` spawns the agent-runner as a local child process instead of a container
+- Workspace paths (`/workspace/*`) are overridden via `NANOCLAW_WORKSPACE_*` environment variables pointing to real host paths
+- The same stdin/stdout sentinel marker protocol is used for communication
+- `IS_SANDBOX=1` is set to allow running as root
+- Container system initialization (`ensureContainerSystemRunning`) is skipped
+- Agents have direct access to the host filesystem (no isolation)
+
+### CLI Chat Mode
+
+`scripts/local-chat.ts` provides a standalone interactive chat that bypasses the full orchestrator:
+
+```bash
+npm run chat                          # Interactive multi-turn mode
+npm run chat -- "Your message here"   # Single-shot mode
+```
+
+It spawns a single agent-runner process that stays alive across conversation turns:
+- First message is sent via stdin (agent-runner protocol)
+- Follow-up messages are delivered via IPC files (`data/ipc/cli-local/input/*.json`)
+- Agent responses are parsed from stdout via sentinel markers
+- The `_close` sentinel file signals graceful shutdown
+
+This mode requires no database, no channels, and no Docker — only API credentials in `.env`.
 
 **Note:** Paths must be absolute for container volume mounts to work correctly.
 
@@ -641,7 +685,7 @@ NanoClaw runs as a single macOS launchd service.
 ### Startup Sequence
 
 When NanoClaw starts, it:
-1. **Ensures container runtime is running** - Automatically starts it if needed; kills orphaned NanoClaw containers from previous runs
+1. **Ensures container runtime is running** (skipped when `AGENT_RUNTIME=local`) - Automatically starts it if needed; kills orphaned NanoClaw containers from previous runs
 2. Initializes the SQLite database (migrates from JSON files if they exist)
 3. Loads state from SQLite (registered groups, sessions, router state)
 4. **Connects channels** — loops through registered channels, instantiates those with credentials, calls `connect()` on each
@@ -715,12 +759,14 @@ tail -f logs/nanoclaw.log
 
 ### Container Isolation
 
-All agents run inside containers (lightweight Linux VMs), providing:
+All agents run inside containers (lightweight Linux VMs) by default, providing:
 - **Filesystem isolation**: Agents can only access mounted directories
 - **Safe Bash access**: Commands run inside the container, not on your Mac
 - **Network isolation**: Can be configured per-container if needed
 - **Process isolation**: Container processes can't affect the host
 - **Non-root user**: Container runs as unprivileged `node` user (uid 1000)
+
+**Local mode** (`AGENT_RUNTIME=local`): Agents run as child processes on the host. This trades container isolation for zero Docker dependency but agents have direct filesystem access. Use when Docker is unavailable or for development/testing.
 
 ### Prompt Injection Risk
 
@@ -782,4 +828,12 @@ Run manually for verbose output:
 npm run dev
 # or
 node dist/index.js
+```
+
+### CLI Chat (Local Mode)
+
+For quick testing without Docker or channels:
+```bash
+npm run chat         # Interactive multi-turn chat
+npm run chat -- "Hello"  # Single-shot
 ```

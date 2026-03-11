@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import {
+  AGENT_RUNTIME,
   ASSISTANT_NAME,
   IDLE_TIMEOUT,
   POLL_INTERVAL,
@@ -50,6 +51,7 @@ import {
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
+import { runLocalAgent } from './local-runner.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -301,7 +303,8 @@ async function runAgent(
     : undefined;
 
   try {
-    const output = await runContainerAgent(
+    const runFn = AGENT_RUNTIME === 'local' ? runLocalAgent : runContainerAgent;
+    const output = await runFn(
       group,
       {
         prompt,
@@ -461,7 +464,11 @@ function ensureContainerSystemRunning(): void {
 }
 
 async function main(): Promise<void> {
-  ensureContainerSystemRunning();
+  if (AGENT_RUNTIME === 'docker') {
+    ensureContainerSystemRunning();
+  } else {
+    logger.info('Running in local mode (no Docker)');
+  }
   initDatabase();
   logger.info('Database initialized');
   loadState();

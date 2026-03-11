@@ -14,11 +14,13 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 | `src/channels/registry.ts` | Channel registry (self-registration at startup) |
 | `src/ipc.ts` | IPC watcher and task processing |
 | `src/router.ts` | Message formatting and outbound routing |
-| `src/config.ts` | Trigger pattern, paths, intervals |
+| `src/config.ts` | Trigger pattern, paths, intervals, `AGENT_RUNTIME` |
 | `src/container-runner.ts` | Spawns agent containers with mounts |
+| `src/local-runner.ts` | Spawns agents as local child processes (no Docker) |
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/db.ts` | SQLite operations |
 | `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
+| `scripts/local-chat.ts` | Interactive CLI chat (no channels/Docker needed) |
 | `container/skills/agent-browser.md` | Browser automation tool (available to all agents via Bash) |
 
 ## Skills
@@ -39,6 +41,7 @@ Run commands directly—don't tell the user to run them.
 ```bash
 npm run dev          # Run with hot reload
 npm run build        # Compile TypeScript
+npm run chat         # Interactive CLI chat (local mode, no Docker)
 ./container/build.sh # Rebuild agent container
 ```
 

@@ -67,3 +67,8 @@ export const TRIGGER_PATTERN = new RegExp(
 // Uses system timezone by default
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// Agent runtime: 'docker' runs agents in containers, 'local' runs as child processes
+export type AgentRuntime = 'docker' | 'local';
+export const AGENT_RUNTIME: AgentRuntime =
+  (process.env.AGENT_RUNTIME as AgentRuntime) || 'docker';

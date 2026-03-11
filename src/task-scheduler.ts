@@ -2,7 +2,7 @@ import { ChildProcess } from 'child_process';
 import { CronExpressionParser } from 'cron-parser';
 import fs from 'fs';
 
-import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
+import { ASSISTANT_NAME, AGENT_RUNTIME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -19,6 +19,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
+import { runLocalAgent } from './local-runner.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
 /**
@@ -169,7 +170,8 @@ async function runTask(
   };
 
   try {
-    const output = await runContainerAgent(
+    const runFn = AGENT_RUNTIME === 'local' ? runLocalAgent : runContainerAgent;
+    const output = await runFn(
       group,
       {
         prompt: task.prompt,
