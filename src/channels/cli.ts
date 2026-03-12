@@ -8,7 +8,7 @@ import fs from 'fs';
 import net from 'net';
 import path from 'path';
 
-import { ASSISTANT_NAME, DATA_DIR } from '../config.js';
+import { DATA_DIR } from '../config.js';
 import { logger } from '../logger.js';
 import { Channel, NewMessage } from '../types.js';
 import { ChannelOpts, registerChannel } from './registry.js';
@@ -113,26 +113,16 @@ class CliChannel implements Channel {
       existing.push(socket);
       this.clients.set(sessionId, existing);
 
-      // Auto-register group if new
       const jid = `cli:${sessionId}`;
-      const folder = `cli-${sessionId}`;
-      if (!this.opts.registeredGroups()[jid]) {
-        this.opts.registerGroup?.(jid, {
-          name: `CLI: ${sessionId}`,
-          folder,
-          trigger: `@${ASSISTANT_NAME}`,
-          added_at: new Date().toISOString(),
-          requiresTrigger: false,
-          isMain: true,
-        });
-      }
+      const group = this.opts.registeredGroups()[jid];
+      const folder = group?.folder ?? `cli-${sessionId}`;
 
       this.writeToSocket(socket, {
         type: 'registered',
         jid,
         folder,
       });
-      logger.info({ sessionId, jid }, 'CLI client registered');
+      logger.info({ sessionId, jid, registered: !!group }, 'CLI client connected');
       return;
     }
 

@@ -486,6 +486,18 @@ async function main(): Promise<void> {
   logger.info('Database initialized');
   loadState();
 
+  // Auto-register CLI channel group if not already registered
+  if (!registeredGroups['cli:default']) {
+    registerGroup('cli:default', {
+      name: 'CLI',
+      folder: 'main',
+      trigger: `@${ASSISTANT_NAME}`,
+      added_at: new Date().toISOString(),
+      requiresTrigger: false,
+      isMain: true,
+    });
+  }
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
